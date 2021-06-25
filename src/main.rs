@@ -1,29 +1,43 @@
-use casbin::casbin_server::CasbinServer;
+use tonic::{transport::Server, Request, Response, Status};
 
-//use crate::casbin::casbin_server::Casbin;
+use casbin_proto::casbin_server::{Casbin, CasbinServer};
 
-use tonic::transport::Server;
-
-pub mod casbin {
+pub mod casbin_proto {
     tonic::include_proto!("proto");
 }
 
-#[derive(Debug, Default)]
-pub struct CasbinStruct {}
+pub mod server;
 
-pub trait CasbinTrait {}
+use crate::server::rbac_api;
 
-#[tonic::async_trait]
-impl CasbinTrait for CasbinStruct {}
+#[derive(Default, Debug)]
+pub struct CasbinGRPC {}
 
-// Runtime to run the server
+//impl Casbin for CasbinGRPC {
+//    fn get_roles_for_user(
+//        &self,
+//        request: Request<casbin_proto::UserRoleRequest>,
+//    ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
+//        println!("Received request from {:?}", request);
+//        let response = casbin_proto::ArrayReply {
+//            message: format!("Hi"),
+//        };
+//
+//        Ok(Response::new(response))
+//    }
+//}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse()?;
-    let casbinserver = CasbinStruct::default();
-    println!("Start gRPC server...");
-    Server::builder()
-        .add_service(CasbinServer::new(casbinserver))
-        .serve(addr)
-        .await?;
+    let addr: String = "[::1]:50051".parse().unwrap();
+    let casbin = CasbinGRPC::default();
+
+    println!("Server listening on: {}", addr);
+    println!("{:?}", casbin);
+    //Server::builder()
+    //    .add_service(CasbinServer::new(casbin))
+    //    .serve(addr)
+    //    .await?;
+
+    Ok(())
 }
