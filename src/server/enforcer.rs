@@ -1,54 +1,53 @@
+use crate::casbin_proto;
+use casbin_proto::casbin_server::{Casbin, CasbinServer};
 use casbin_proto::{NewEnforcerReply, NewEnforcerRequest};
 use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 
-use crate::casbin_proto;
-
+use crate::CasbinGRPC;
 use casbin::{Adapter, Enforcer};
-use std::error::Error;
 
-pub struct Server {
-    enforcerMap: HashMap<i32, Enforcer>,
-    adapterMap: HashMap<i32, Box<dyn Adapter>>,
-}
-
-impl Server {
-    pub fn NewServer() -> Self {
+impl CasbinGRPC {
+    pub fn new_server() -> Self {
         Self {
             enforcerMap: HashMap::new(),
             adapterMap: HashMap::new(),
         }
     }
-}
-
-impl Server {
-    pub fn getEnforcer(&self, handle: i32) -> Option<&Enforcer> {
+    pub fn get_enforcer(&self, handle: i32) -> Enforcer {
         self.enforcerMap.get(&handle)
     }
-
-    pub fn getAdapter(&self, handle: i32) -> Option<&Box<dyn Adapter>> {
+    pub fn get_adapter(&self, handle: i32) -> Box<dyn Adapter> {
         self.adapterMap.get(&handle)
     }
-    pub fn addEnforcer(&self, e: Enforcer) -> i32 {
-        let cnt: usize = self.enforcerMap.len();
+    pub fn add_enforcer(&self, e: Enforcer) -> i32 {
+        let cnt: i32 = self.enforcerMap.len() as i32;
         self.enforcerMap[&cnt] = e;
         cnt
     }
-    pub fn addAdapter(&self, a: Box<dyn Adapter>) -> i32 {
-        let cnt: i32 = self.adapterMap.len();
+    pub fn add_adapter(&self, a: Box<dyn Adapter>) -> i32 {
+        let cnt: i32 = self.adapterMap.len() as i32;
         self.adapterMap[&cnt] = a;
         cnt
     }
-    pub fn NewEnforcer(
+}
+
+#[tonic::async_trait]
+impl Casbin for CasbinGRPC {
+    async fn new_enforcer(
         &self,
         i: Request<NewEnforcerRequest>,
     ) -> Result<Response<NewEnforcerReply>, Status> {
-        let a: Box<dyn Adapter>;
+        let a;
         let e: Enforcer;
         if i.into_inner().adapter_handle != -1 {
-            a = self.getAdapter(i.into_inner().adapter_handle as i32);
+            a = self.get_adapter(i.into_inner().adapter_handle as i32);
             let response = NewEnforcerReply { handler: 0 };
-            Ok(Response::new(response))
+            return Ok(Response::new(response));
         }
+
+        //if i.into_inner().model_text == "" {
+        //    let cfg:
+        //}
     }
 }

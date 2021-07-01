@@ -5,16 +5,25 @@ pub mod casbin_proto {
     tonic::include_proto!("proto");
 }
 
-use crate::server::enforcer::Server;
-//use crate::CasbinGRPC;
+use casbin_proto::{ArrayReply, UserRoleRequest};
 
-impl Server {
-    fn GetRolesForUser(
+//use crate::server::enforcer::Server;
+use crate::CasbinGRPC;
+
+
+#[tonic::async_trait]
+impl Casbin for CasbinGRPC {
+    // get_roles_for_user gets the roles that a user has.
+    async fn get_roles_for_user(
         &self,
-        request: Request<casbin_proto::UserRoleRequest>,
-    ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        println!("Received request from {:?}", request);
-        let response = casbin_proto::ArrayReply {};
+        request: Request<UserRoleRequest>,
+    ) -> Result<Response<ArrayReply>, Status> {
+        //debug!("Received request from {:?}", request);
+        let x =  
+        let roles_for_user = enforcer::get_enforcer(request.into_inner().enforcer_handler as i32);
+        let response = ArrayReply {
+            list: roles_for_user,
+        };
         Ok(Response::new(response))
     }
 
