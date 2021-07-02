@@ -14,10 +14,10 @@ impl CasbinGRPC {
             adapterMap: HashMap::new(),
         }
     }
-    pub fn get_enforcer(&self, handle: i32) -> Enforcer {
+    pub fn get_enforcer(&self, handle: i32) -> &Enforcer {
         self.enforcerMap.get(&handle)
     }
-    pub fn get_adapter(&self, handle: i32) -> Box<dyn Adapter> {
+    pub fn get_adapter(&self, handle: i32) -> Option<&Box<dyn Adapter>> {
         self.adapterMap.get(&handle)
     }
     pub fn add_enforcer(&self, e: Enforcer) -> i32 {
