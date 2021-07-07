@@ -40,15 +40,21 @@ impl Casbin for CasbinGRPC {
         Ok(Response::new(response))
     }
 
-    // get_users_for_role gets the users that has a role.
+    // get_users_for_role gets the users that have a role.
     async fn get_users_for_role(
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
-        let response = casbin_proto::ArrayReply {
-            //array:
+        let enf = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(e) => return (&casbin_proto::ArrayReply {}, Err(e)),
         };
+        if let Some(t1) = enf.get_model().get_model().get("g") {
+            if let Some(t2) = t1.get("g") {
+                return t2.rm.read().get_users(request.into_inner().user);
+            }
+        }
+        let response = casbin_proto::ArrayReply {};
         Ok(Response::new(response))
     }
 
