@@ -1,27 +1,23 @@
+use crate::casbin_proto;
 use casbin_proto::casbin_server::{Casbin, CasbinServer};
 use tonic::{Request, Response, Status};
-
-pub mod casbin_proto {
-    tonic::include_proto!("proto");
-}
-
-use casbin_proto::{ArrayReply, UserRoleRequest};
 
 //use casbin::Enforcer;
 use crate::CasbinGRPC;
 use casbin::CoreApi;
-
+use casbin::{Adapter, Enforcer};
 #[tonic::async_trait]
 impl Casbin for CasbinGRPC {
+    // RBAC functions here
+
     // get_roles_for_user gets the roles that a user has.
     async fn get_roles_for_user(
         &self,
-        request: Request<UserRoleRequest>,
-    ) -> Result<Response<ArrayReply>, Status> {
-        //debug!("Received request from {:?}", request);
+        request: Request<casbin_proto::UserRoleRequest>,
+    ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
-        let roles_for_user = e.get_model()["g"]["g"];
-        let response = ArrayReply {
+        let roles_for_user = e.unwrap().get_model().get_model().get("g");
+        let response = casbin_proto::ArrayReply {
             //array: roles_for_user,
         };
         Ok(Response::new(response))
@@ -156,5 +152,30 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+    }
+
+    // Enforcer functions here
+    async fn new_enforcer(
+        &self,
+        i: Request<casbin_proto::NewEnforcerRequest>,
+    ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
+        let a: Box<dyn Adapter>;
+        let e: Enforcer;
+        if i.into_inner().adapter_handle != -1 {
+            a = match self.get_adapter(i.into_inner().adapter_handle) {
+                Ok(v) => v,
+                Err(e) => return Err(Status::new("")),
+            };
+        }
+    }
+
+    // Adapter functions here
+    async fn new_adapter(
+        &self,
+        i: Request<casbin_proto::NewAdapterRequest>,
+    ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
+        let a: Box<dyn Adapter>;
+        let response;
+        Ok(Response::new(response))
     }
 }
