@@ -2,10 +2,13 @@ use crate::casbin_proto;
 use casbin_proto::casbin_server::{Casbin, CasbinServer};
 use tonic::{Request, Response, Status};
 
-//use casbin::Enforcer;
+use crate::server::adapter;
+
 use crate::CasbinGRPC;
 use casbin::CoreApi;
+use casbin::FileAdapter;
 use casbin::{Adapter, Enforcer};
+
 #[tonic::async_trait]
 impl Casbin for CasbinGRPC {
     // RBAC functions here
@@ -16,7 +19,7 @@ impl Casbin for CasbinGRPC {
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
-        let roles_for_user = e.unwrap().get_model().get_model().get("g");
+        let roles_for_user = e.unwrap().get_model().get_model().get("g")["g"];
         let response = casbin_proto::ArrayReply {
             //array: roles_for_user,
         };
@@ -29,10 +32,8 @@ impl Casbin for CasbinGRPC {
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
-        let implicit_roles_for_user;
-        let response = casbin_proto::ArrayReply {
-            //array: 
-        };
+        let implicit_roles_for_user = e.unwrap();
+        let response = casbin_proto::ArrayReply { array: [] };
         Ok(Response::new(response))
     }
 
@@ -43,7 +44,7 @@ impl Casbin for CasbinGRPC {
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let enf = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
             Ok(v) => v,
-            Err(e) => return (&casbin_proto::ArrayReply {}, Err(e)),
+            Err(e) => return (&casbin_proto::ArrayReply { array: [] }, Err(e)),
         };
         if let Some(t1) = enf.get_model().get_model().get("g") {
             if let Some(t2) = t1.get("g") {
@@ -164,8 +165,12 @@ impl Casbin for CasbinGRPC {
         if i.into_inner().adapter_handle != -1 {
             a = match self.get_adapter(i.into_inner().adapter_handle) {
                 Ok(v) => v,
-                Err(e) => return Err(Status::new("")),
+                Err(e) => return Err(Status::new(tonic::Code::NotFound, "not found")),
             };
+        }
+        if i.into_inner().model_text == String::from("") {
+            let cfg = adapter::load_configuration("config/connection_config.json");
+            // let data = match
         }
     }
 
@@ -173,9 +178,14 @@ impl Casbin for CasbinGRPC {
     async fn new_adapter(
         &self,
         i: Request<casbin_proto::NewAdapterRequest>,
-    ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let a: Box<dyn Adapter>;
+    ) -> Result<Response<casbin_proto::NewAdapterReply>, Status> {
+        let mut a: Box<dyn Adapter>;
         let response;
+        adapter::check_local_config(&mut i);
+        let support_driver_names = vec!["file", "mysql", "postgres", "mssql"];
+        match i.get_mut().driver_name {
+            String::from("file") => {}
+        }
         Ok(Response::new(response))
     }
 }
