@@ -6,6 +6,7 @@ pub mod casbin_proto {
     tonic::include_proto!("proto");
 }
 
+pub mod proto;
 pub mod server;
 //use crate::server::rbac_api;
 use casbin::{Adapter, Enforcer};

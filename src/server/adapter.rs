@@ -1,12 +1,45 @@
 use crate::casbin_proto::NewAdapterRequest;
+use casbin::FileAdapter;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio::fs::File;
 use tonic::Request;
 
-use serde::{Deserialize, Serialize};
+pub static ERR_DRIVER_NAME: &str =
+    "currently supported DriverName: file | mysql | postgres | mssql";
 
-static ERR_DRIVER_NAME: &str = "currently supported DriverName: file | mysql | postgres | mssql";
+pub async fn new_adapter(
+    i: &mut Request<NewAdapterRequest>,
+) -> Result<FileAdapter<String>, &'static str> {
+    let a: FileAdapter<String>;
+    check_local_config(i);
+    let support_driver_names = vec![
+        String::from("file"),
+        String::from("mysql"),
+        String::from("postgres"),
+        String::from("mssql"),
+    ];
+    let st = String::from("file");
+    let connect_string = i.get_mut().connect_string;
+    match &i.get_mut().driver_name {
+        st => a = FileAdapter::new(connect_string.to_string()),
+        _ => {
+            let mut support: bool = false;
+            for driver_name in support_driver_names.iter() {
+                if driver_name == &i.get_mut().driver_name {
+                    support = true;
+                    break;
+                }
+            }
+            if !support {
+                return Err(ERR_DRIVER_NAME);
+            }
+            // a, err = gormadapter.NewAdapter(in.DriverName, in.ConnectString, in.DbSpecified)
+        }
+    }
+    Ok(a)
+}
 
 pub async fn check_local_config(i: &mut Request<NewAdapterRequest>) {
     let cfg: Config = load_configuration("config/connection_config.json")
@@ -28,14 +61,15 @@ pub async fn load_configuration(file: &str) -> Result<Config, std::io::Error> {
     let decoder: Config = serde_json::from_str(file).expect("JSON was not well-formatted");
     let mut config: Config = Config::default();
     let re = Regex::new(r"\$\b((\w*))\b");
+
     // config.connection
     Ok(config)
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Config {
-    driver: String,
-    connection: String,
-    enforcer: String,
-    db_specified: bool,
+    pub driver: String,
+    pub connection: String,
+    pub enforcer: String,
+    pub db_specified: bool,
 }

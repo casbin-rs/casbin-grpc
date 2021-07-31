@@ -6,8 +6,8 @@ use crate::server::adapter;
 
 use crate::CasbinGRPC;
 use casbin::CoreApi;
-use casbin::FileAdapter;
-use casbin::{Adapter, Enforcer};
+use casbin::DefaultModel;
+use casbin::{Adapter, Enforcer, Model};
 
 #[tonic::async_trait]
 impl Casbin for CasbinGRPC {
@@ -18,11 +18,22 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
-        let roles_for_user = e.unwrap().get_model().get_model().get("g")["g"];
-        let response = casbin_proto::ArrayReply {
-            //array: roles_for_user,
-        };
+        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32)?;
+        //if let Some(t1) = self.get_mut_model().get_mut_model().get_mut("g") {
+        //    if let Some(t2) = t1.get_mut("g") {
+        //        roles = t2.rm.write().get_roles(name, domain);
+        //    }
+        //}
+        let mut roles = vec![];
+        if let Some(outer_model) = e.get_mut_model().get_mut_model().get_mut("g") {
+            if let Some(inner_model) = outer_model.get_mut("g") {
+                // &mut Assertion
+                // mut Assertion
+                roles = inner_model.rm.write().get_roles(request.into_inner().user);
+            }
+        }
+        // let roles_for_user = e.get_model().
+        let response = casbin_proto::ArrayReply { array: roles };
         Ok(Response::new(response))
     }
 
@@ -160,32 +171,67 @@ impl Casbin for CasbinGRPC {
         &self,
         i: Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let a: Box<dyn Adapter>;
+        let a: Option<Box<dyn Adapter>>;
         let e: Enforcer;
-        if i.into_inner().adapter_handle != -1 {
+        if i.get_mut().adapter_handle != -1 {
             a = match self.get_adapter(i.into_inner().adapter_handle) {
-                Ok(v) => v,
-                Err(e) => return Err(Status::new(tonic::Code::NotFound, "not found")),
+                Ok(v) => Some(v),
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         }
-        if i.into_inner().model_text == String::from("") {
-            let cfg = adapter::load_configuration("config/connection_config.json");
-            // let data = match
+        if i.get_mut().model_text == String::from("") {
+            let cfg = adapter::load_configuration("config/connection_config.json").await?;
+            let data = match std::fs::read_to_string(cfg.enforcer.as_str()) {
+                Ok(v) => v,
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
         }
+
+        if a == None {
+            let m = match DefaultModel::from_str(i.get_mut().model_text.as_str()) {
+                Ok(v) => v,
+                Err(e) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
+            let e = match casbin::Enforcer::new(m, ()) {
+                Ok(v) => v,
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
+        } else {
+            let m = match DefaultModel::from_str(i.get_mut().model_text.as_str()) {
+                Ok(v) => v,
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
+            let e = match casbin::Enforcer::new(m, a) {
+                Ok(v) => v,
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
+        }
+        let h = self.add_enforcer(e);
+        Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
     }
 
-    // Adapter functions here
     async fn new_adapter(
         &self,
         i: Request<casbin_proto::NewAdapterRequest>,
     ) -> Result<Response<casbin_proto::NewAdapterReply>, Status> {
-        let mut a: Box<dyn Adapter>;
-        let response;
-        adapter::check_local_config(&mut i);
-        let support_driver_names = vec!["file", "mysql", "postgres", "mssql"];
-        match i.get_mut().driver_name {
-            String::from("file") => {}
-        }
+        let a = adapter::new_adapter(i)
+            .await
+            .expect("adapter could not be found");
+        let h: i32 = self.add_adapter(a);
+        let response = casbin_proto::NewAdapterReply { handler: h };
         Ok(Response::new(response))
     }
+
+    // Management API functions here
+
+    //async fn wrap_plain_policy<'a, Matrix: AsRef[Row]>(
+    //    &self,
+    //    )
+    //// get_all_subjects gets the list of subjects that show up in the current policy.
+    //async fn get_all_subjects(
+    //    &self,
+    //    i: Request<casbin_proto::EmptyRequest>,
+    //) -> Result<Response<casbin_proto::ArrayReply>, Status> {
+    //    self.get_all_named_subjects()
+    //}
 }
