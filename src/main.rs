@@ -1,14 +1,9 @@
-//use casbin_proto::casbin_server::{Casbin, CasbinServer};
 use std::collections::HashMap;
-//use tonic::{transport::Server, Request, Response, Status};
-
 pub mod casbin_proto {
     tonic::include_proto!("proto");
 }
-
 pub mod proto;
 pub mod server;
-//use crate::server::rbac_api;
 use casbin::{Adapter, Enforcer};
 
 #[derive(Default)]

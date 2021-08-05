@@ -3,11 +3,10 @@ use casbin_proto::casbin_server::{Casbin, CasbinServer};
 use tonic::{Request, Response, Status};
 
 use crate::server::adapter;
-
 use crate::CasbinGRPC;
-use casbin::CoreApi;
 use casbin::DefaultModel;
-use casbin::{Adapter, Enforcer, Model};
+use casbin::MgmtApi;
+use casbin::{Adapter, CoreApi, Enforcer, Model, RbacApi};
 
 #[tonic::async_trait]
 impl Casbin for CasbinGRPC {
@@ -18,12 +17,10 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32)?;
-        //if let Some(t1) = self.get_mut_model().get_mut_model().get_mut("g") {
-        //    if let Some(t2) = t1.get_mut("g") {
-        //        roles = t2.rm.write().get_roles(name, domain);
-        //    }
-        //}
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
         let mut roles = vec![];
         if let Some(outer_model) = e.get_mut_model().get_mut_model().get_mut("g") {
             if let Some(inner_model) = outer_model.get_mut("g") {
@@ -42,7 +39,10 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
         let implicit_roles_for_user = e.unwrap();
         let response = casbin_proto::ArrayReply { array: [] };
         Ok(Response::new(response))
@@ -55,14 +55,15 @@ impl Casbin for CasbinGRPC {
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let enf = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
             Ok(v) => v,
-            Err(e) => return (&casbin_proto::ArrayReply { array: [] }, Err(e)),
+            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
         };
+        let res;
         if let Some(t1) = enf.get_model().get_model().get("g") {
             if let Some(t2) = t1.get("g") {
-                return t2.rm.read().get_users(request.into_inner().user);
+                res = t2.rm.read().get_users(request.into_inner().user);
             }
         }
-        let response = casbin_proto::ArrayReply {};
+        let response = casbin_proto::ArrayReply { array: res };
         Ok(Response::new(response))
     }
 
@@ -71,7 +72,22 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let e = self.get_enforcer(request.into_inner().enforcer_handler as i32);
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let roles = match e.get_roles_for_user(request.into_inner().user, None) {
+            Ok(v) => v,
+            Err(er) => return er,
+        };
+        let s = request.into_inner().user;
+        for role in roles.into_iter() {
+            match role {
+                s => Ok(Response::new(casbin_proto::BoolReply { res: true })),
+                _ => println!("No roles found"),
+            }
+        }
+        Ok(Response::new(casbin_proto::BoolReply {}))
     }
 
     // add_role_for_user adds a role for a user.
@@ -80,6 +96,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_added = e
+            .add_grouping_policy(request.into_inner().role)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_added }))
     }
 
     // delete_role_for_user deletes a role for a user.
@@ -88,6 +113,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e
+            .remove_grouping_policy(request.into_inner().role)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // delete_roles_for_user deletes all roles for a user.
@@ -96,6 +130,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e
+            .remove_filtered_grouping_policy(0, request.into_inner().user)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // delete_user deletes a user.
@@ -104,6 +147,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e.remove_filtered_grouping_policy(0, request.into_inner().user);
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // delete_role deletes a role
@@ -111,6 +160,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::EmptyReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let _ = e.delete_role(&request.into_inner().role).await.into_ok();
+        Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
     // delete_permission deletes a permission.
@@ -119,6 +174,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e
+            .remove_filtered_policy(1, request.into_inner().permissions)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // add_permission_for user adds a permission for a user or role.
@@ -127,6 +191,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_added = e
+            .add_policy(request.into_inner().permissions)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_added }))
     }
 
     // delete_permission_for_user deletes a permission for a user or role.
@@ -135,6 +208,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e
+            .remove_policy(request.into_inner().permissions)
+            .await
+            .into_ok();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // delete_permissions_for_user deletes permissions for a user or role.
@@ -143,6 +225,15 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
+        let rule_removed = e
+            .remove_filtered_policy(0, request.into_inner().user)
+            .await
+            .into_ok;
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     // get_permissions_for_user gets permissions for a user or role.
@@ -150,6 +241,10 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
     }
 
     // get_implicit_permissions_for_user gets all permissions(including children) for a user or role.
@@ -157,6 +252,10 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
     }
 
     // has_permission_for_user gets determines whether a user has a permission.
@@ -164,6 +263,10 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+        };
     }
 
     // Enforcer functions here
@@ -214,10 +317,10 @@ impl Casbin for CasbinGRPC {
         &self,
         i: Request<casbin_proto::NewAdapterRequest>,
     ) -> Result<Response<casbin_proto::NewAdapterReply>, Status> {
-        let a = adapter::new_adapter(i)
+        let a = adapter::new_adapter(&mut i)
             .await
             .expect("adapter could not be found");
-        let h: i32 = self.add_adapter(a);
+        let h: i32 = self.add_adapter(Box::new(a));
         let response = casbin_proto::NewAdapterReply { handler: h };
         Ok(Response::new(response))
     }
