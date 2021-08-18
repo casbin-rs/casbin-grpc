@@ -7,3 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tonic = "0.5"
+prost = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.6.1", features = ["full", "rt-multi-thread", "macros"] }
+casbin = "2.0.7"
+serde_json = "1.0"
+regex = "1.5.4"
+
+[build-dependencies]
+tonic-build = "0.5"
