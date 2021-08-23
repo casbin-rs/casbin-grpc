@@ -21,9 +21,10 @@ pub async fn new_adapter(
         String::from("mssql"),
     ];
     let st = String::from("file");
-    let connect_string = &i.get_mut().connect_string;
+    let i_ref = &i.get_mut();
+    let connect_string: String = String::from(&i_ref.connect_string);
 
-    match &i.get_mut().driver_name {
+    match &i_ref.driver_name {
         st => a = FileAdapter::new(connect_string.to_string()),
         _ => {
             let mut support: bool = false;
@@ -37,6 +38,7 @@ pub async fn new_adapter(
                 return Err(ERR_DRIVER_NAME);
             }
             // a, err = gormadapter.NewAdapter(in.DriverName, in.ConnectString, in.DbSpecified)
+            // use diesel adapter
         }
     }
     Ok(a)

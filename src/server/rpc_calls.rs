@@ -310,7 +310,7 @@ impl Casbin for CasbinGRPC {
         &self,
         i: Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let a: Option<&Box<dyn Adapter>>;
+        let a: Option<dyn Adapter>;
         let e: Enforcer;
         if i.get_mut().adapter_handle != -1 {
             a = match self.get_adapter(i.into_inner().adapter_handle) {
@@ -332,13 +332,14 @@ impl Casbin for CasbinGRPC {
                     .unwrap();
                 let e = casbin::Enforcer::new(m, ()).await.unwrap();
             }
-            _ => {
+            Some(v) => {
                 let m = DefaultModel::from_str(i.get_mut().model_text.as_str())
                     .await
                     .unwrap();
-                let e = casbin::Enforcer::new(m, a.expect("")).await.unwrap();
+                let e = casbin::Enforcer::new(m, v).await.unwrap();
             }
         }
+
         let h = self.add_enforcer(e);
         Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
     }
@@ -370,11 +371,39 @@ impl Casbin for CasbinGRPC {
             None => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
         };
         let val: String = m["m"].value;
-        //for i in request.into_inner().params.iter() {
-        //    let param = self.parse_param(i, )
-        //}
+        for i in request.into_inner().params.iter() {
+            let param = self.parse_param(String::from(i), &mut val);
+            params.push(param);
+        }
+
+        // res, err := e.EnforceWithMatcher(m, params...)
+        let y = e.enforce(m, params);
+
+        Ok(Response::new(casbin_proto::BoolReply { res: false }))
 
         // let res: bool =
+    }
+
+    async fn load_policy(
+        &self,
+        request: Request<casbin_proto::EmptyRequest>,
+    ) -> Result<Response<casbin_proto::EmptyReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Ok(Response::new(casbin_proto::EmptyReply {})),
+        };
+        Ok(Response::new(casbin_proto::EmptyReply {}))
+    }
+
+    async fn save_policy(
+        &self,
+        request: Request<casbin_proto::EmptyRequest>,
+    ) -> Result<Response<casbin_proto::EmptyReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Ok(Response::new(casbin_proto::EmptyReply {})),
+        };
+        Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
     // Management API functions here
