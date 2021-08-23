@@ -1,12 +1,13 @@
 use crate::casbin_proto;
-use casbin_proto::casbin_server::{Casbin, CasbinServer};
+use casbin_proto::casbin_server::Casbin;
 use tonic::{Request, Response, Status};
 
-use crate::server::{adapter, management_api};
+use crate::server::adapter;
 use crate::CasbinGRPC;
+use casbin::Assertion;
 use casbin::DefaultModel;
 use casbin::MgmtApi;
-use casbin::{Adapter, CoreApi, Enforcer, Model, RbacApi};
+use casbin::{Adapter, CoreApi, Enforcer, RbacApi};
 
 impl CasbinGRPC {
     pub fn convert_permission(&self, user: String, permissions: Vec<String>) -> Vec<String> {
@@ -309,11 +310,11 @@ impl Casbin for CasbinGRPC {
         &self,
         i: Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let a: Option<Box<dyn Adapter>>;
+        let a: Option<&Box<dyn Adapter>>;
         let e: Enforcer;
         if i.get_mut().adapter_handle != -1 {
             a = match self.get_adapter(i.into_inner().adapter_handle) {
-                Ok(v) => Some(Box::new(v)),
+                Ok(v) => Some(v),
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         }
@@ -324,25 +325,19 @@ impl Casbin for CasbinGRPC {
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         }
-
-        if a == None {
-            let m = match DefaultModel::from_str(i.get_mut().model_text.as_str()) {
-                Ok(v) => v,
-                Err(e) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-            let e = match casbin::Enforcer::new(m, ()) {
-                Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-        } else {
-            let m = match DefaultModel::from_str(i.get_mut().model_text.as_str()) {
-                Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-            let e = match casbin::Enforcer::new(m, a) {
-                Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
+        match a {
+            None => {
+                let m = DefaultModel::from_str(i.get_mut().model_text.as_str())
+                    .await
+                    .unwrap();
+                let e = casbin::Enforcer::new(m, ()).await.unwrap();
+            }
+            _ => {
+                let m = DefaultModel::from_str(i.get_mut().model_text.as_str())
+                    .await
+                    .unwrap();
+                let e = casbin::Enforcer::new(m, a.expect("")).await.unwrap();
+            }
         }
         let h = self.add_enforcer(e);
         Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
@@ -358,6 +353,28 @@ impl Casbin for CasbinGRPC {
         let h: i32 = self.add_adapter(Box::new(a));
         let response = casbin_proto::NewAdapterReply { handler: h };
         Ok(Response::new(response))
+    }
+
+    async fn enforce(
+        &self,
+        request: Request<casbin_proto::EnforceRequest>,
+    ) -> Result<Response<casbin_proto::BoolReply>, Status> {
+        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
+            Ok(v) => v,
+            Err(er) => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
+        };
+
+        let params = vec![];
+        let m = match e.get_model().get_model().get("m") {
+            Some(x) => x,
+            None => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
+        };
+        let val: String = m["m"].value;
+        //for i in request.into_inner().params.iter() {
+        //    let param = self.parse_param(i, )
+        //}
+
+        // let res: bool =
     }
 
     // Management API functions here

@@ -21,7 +21,8 @@ pub async fn new_adapter(
         String::from("mssql"),
     ];
     let st = String::from("file");
-    let connect_string = i.get_mut().connect_string;
+    let connect_string = &i.get_mut().connect_string;
+
     match &i.get_mut().driver_name {
         st => a = FileAdapter::new(connect_string.to_string()),
         _ => {

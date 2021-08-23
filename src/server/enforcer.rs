@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::server::abac;
 use crate::CasbinGRPC;
 use casbin::{Adapter, Enforcer};
 
@@ -25,5 +26,25 @@ impl CasbinGRPC {
         let cnt: i32 = self.adapterMap.len() as i32;
         self.adapterMap[&cnt] = a;
         cnt
+    }
+
+    pub fn parse_param(
+        &self,
+        param: String,
+        matcher: &mut String,
+    ) -> Result<abac::AbacAttrList, String> {
+        if param.starts_with("ABAC::") {
+            let attr_list = abac::resolve_abac(String::from(param)).expect("");
+            for (k, v) in attr_list.name_map.iter() {
+                let old: String = format!("{}{}", ".", &k);
+                let new: String = format!("{}{}", ".", &v);
+                if matcher.contains(&old) {
+                    matcher = &mut matcher.replace(&old, &new);
+                }
+            }
+            return Ok(attr_list);
+        } else {
+            return Err(param);
+        }
     }
 }
