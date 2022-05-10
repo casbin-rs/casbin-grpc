@@ -12,7 +12,7 @@ pub static ERR_DRIVER_NAME: &str =
 pub async fn new_adapter(
     i: &mut Request<NewAdapterRequest>,
 ) -> Result<FileAdapter<String>, &'static str> {
-    let a: FileAdapter<String>;
+    let a: FileAdapter<std::string::String>;
     check_local_config(i);
     let support_driver_names = vec![
         String::from("file"),
@@ -21,13 +21,15 @@ pub async fn new_adapter(
         String::from("mssql"),
     ];
     let st = String::from("file");
-    let connect_string = i.get_mut().connect_string;
-    match &i.get_mut().driver_name {
+    let i_getmut = i.get_mut();
+    let connect_string = &i_getmut.connect_string;
+    let driver_name = &i_getmut.driver_name;
+    match driver_name {
         st => a = FileAdapter::new(connect_string.to_string()),
         _ => {
             let mut support: bool = false;
-            for driver_name in support_driver_names.iter() {
-                if driver_name == &i.get_mut().driver_name {
+            for driver_name1 in support_driver_names.iter() {
+                if driver_name1 == driver_name {
                     support = true;
                     break;
                 }
@@ -35,7 +37,7 @@ pub async fn new_adapter(
             if !support {
                 return Err(ERR_DRIVER_NAME);
             }
-            // a, err = gormadapter.NewAdapter(in.DriverName, in.ConnectString, in.DbSpecified)
+            // a, err = gormadapter.NewAdapter(in.DriverName, in.ConnectString, in.DbSpecified);
         }
     }
     Ok(a)
@@ -59,7 +61,7 @@ pub async fn load_configuration(file: &str) -> Result<Config, std::io::Error> {
 
     let config_file = File::open(file).await.expect("file not found");
     let decoder: Config = serde_json::from_str(file).expect("JSON was not well-formatted");
-    let mut config: Config = Config::default();
+    let config: Config = Config::default();
     let re = Regex::new(r"\$\b((\w*))\b");
 
     // config.connection
