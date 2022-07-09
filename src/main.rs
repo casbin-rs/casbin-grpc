@@ -4,12 +4,14 @@ pub mod casbin_proto {
 }
 pub mod proto;
 pub mod server;
+use crate::casbin_proto::casbin_server::CasbinServer;
 use casbin::{Adapter, Enforcer};
+use tonic::transport::Server;
 
 #[derive(Default)]
 pub struct CasbinGRPC {
-    enforcerMap: HashMap<i32, Enforcer>,
-    adapterMap: HashMap<i32, Box<dyn Adapter>>,
+    enforcer_map: HashMap<i32, Enforcer>,
+    adapter_map: HashMap<i32, Box<dyn Adapter>>,
 }
 
 #[tokio::main]
@@ -18,10 +20,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let casbin = CasbinGRPC::default();
 
     println!("Server listening on: {}", addr);
-    //Server::builder()
-    //    .add_service(CasbinServer::new(casbin))
-    //    .serve(addr)
-    //    .await?;
+    Server::builder()
+        .add_service(CasbinServer::new(casbin))
+        .serve(addr.parse().unwrap())
+        .await?;
 
     Ok(())
 }
