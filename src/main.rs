@@ -8,8 +8,8 @@ use casbin::{Adapter, Enforcer};
 
 #[derive(Default)]
 pub struct CasbinGRPC {
-    enforcerMap: HashMap<i32, Enforcer>,
-    adapterMap: HashMap<i32, Box<dyn Adapter>>,
+    enforcer_map: HashMap<i32, Enforcer>,
+    adapter_map: HashMap<i32, Box<dyn Adapter>>,
 }
 
 #[tokio::main]
