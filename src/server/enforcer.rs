@@ -17,15 +17,15 @@ impl CasbinGRPC {
     pub fn get_adapter(&self, handle: i32) -> Result<&Box<dyn Adapter>, &str> {
         self.adapter_map.get(&handle).ok_or("No adapter found")
     }
-    pub fn add_enforcer(&self, e: Enforcer) -> i32 {
+    pub fn add_enforcer(&mut self, e: Enforcer) -> i32 {
         
         let cnt: i32 = self.enforcer_map.len() as i32;
-        self.enforcer_map[&cnt] = e;
+        self.enforcer_map.insert(cnt, e);
         cnt
     }
-    pub fn add_adapter(&self, a: Box<dyn Adapter>) -> i32 {
+    pub fn add_adapter(&mut self, a: Box<dyn Adapter>) -> i32 {
         let cnt: i32 = self.adapter_map.len() as i32;
-        self.adapter_map[&cnt] = a;
+        self.adapter_map.insert(cnt, a);
         cnt
     }
     pub fn parse_param(
@@ -39,7 +39,7 @@ impl CasbinGRPC {
                 let old: String = format!("{}{}", ".", &k);
                 let new: String = format!("{}{}", ".", &v);
                 if matcher.contains(&old) {
-                    matcher = &mut matcher.replace(&old, &new);
+                    matcher.replace(&old, &new);
                 }
             }
             return Ok(attr_list);
@@ -47,4 +47,5 @@ impl CasbinGRPC {
             return Err(param);
         }
     }
+
 }

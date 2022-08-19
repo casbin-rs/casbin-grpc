@@ -10,7 +10,7 @@ use tonic::{Request, Response, Status};
 
 use crate::server::{adapter, enforcer};
 use crate::CasbinGRPC;
-use casbin::DefaultModel;
+use casbin::{DefaultModel, TryIntoAdapter};
 use casbin::MgmtApi;
 use casbin::{Adapter, CoreApi, Enforcer, RbacApi};
 
@@ -31,18 +31,19 @@ impl Casbin for CasbinGRPC {
     // get_roles_for_user gets the roles that a user has.
     async fn get_roles_for_user(
         &self,
-        request: Request<casbin_proto::UserRoleRequest>,
+        mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let e = match self.get_enforcer(request.into_inner().enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
+       let req_clone = request.get_mut();
+        let mut e = match self.get_enforcer(req_clone.enforcer_handler as i32) {
+            Ok(&v) => v,
+            Err(err) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
         };
         let mut roles = vec![];
         if let Some(outer_model) = e.get_mut_model().get_mut_model().get_mut("g") {
             if let Some(inner_model) = outer_model.get_mut("g") {
                 // &mut Assertion
                 // mut Assertion
-                roles = inner_model.rm.write().get_roles(request.into_inner().user);
+                roles = inner_model.rm.write().get_roles(&request.into_inner().user, None);
             }
         }
         // let roles_for_user = e.get_model().
@@ -76,7 +77,7 @@ impl Casbin for CasbinGRPC {
         let res;
         if let Some(t1) = enf.get_model().get_model().get("g") {
             if let Some(t2) = t1.get("g") {
-                res = t2.rm.read().get_users(request.into_inner().user);
+                res = t2.rm.read().get_users(&request.into_inner().user, None);
             }
         }
         let response = casbin_proto::ArrayReply { array: res };
@@ -312,10 +313,12 @@ impl Casbin for CasbinGRPC {
     // Enforcer functions here
     async fn new_enforcer(
         &self,
-        i: Request<casbin_proto::NewEnforcerRequest>,
+        mut i:Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let a: Option<Box<dyn Adapter>>;
+        // implement TryIntoMethod for following a as well
+        let mut a: Option<Box<dyn Adapter>> = None;
         let e: Enforcer;
+
 
         if i.get_mut().adapter_handle != -1 {
             a = match self.get_adapter(i.into_inner().adapter_handle) {
@@ -336,7 +339,7 @@ impl Casbin for CasbinGRPC {
                 Ok(v) => v,
                 Err(e) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
-            let e = match casbin::Enforcer::new(m, ()).await {
+            e = match casbin::Enforcer::new(m, ()).await {
                 Ok(v) => v,
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
@@ -345,7 +348,8 @@ impl Casbin for CasbinGRPC {
                 Ok(v) => v,
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
-            let e = match casbin::Enforcer::new(m, a.unwrap()).await {
+
+            e = match casbin::Enforcer::new(m, a).await {
                 Ok(v) => v,
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
@@ -361,7 +365,8 @@ impl Casbin for CasbinGRPC {
         let a = adapter::new_adapter(&mut i)
             .await
             .expect("adapter could not be found");
-        let h: i32 = self.add_adapter(Box::new(a));
+
+        let h: i32 = self.add_adapter(a);
         let response = casbin_proto::NewAdapterReply { handler: h };
         Ok(Response::new(response))
     }
@@ -389,20 +394,30 @@ impl Casbin for CasbinGRPC {
         };
 
         let params = vec![];
+        let params_rbac = vec![];
         let m = match e.get_model().get_model().get("m") {
             Some(x) => x,
             None => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
         };
         let val: String = m["m"].value;
+        let mut res;
         for i in request.into_inner().params.iter() {
-            let param = self.parse_param(String::from(i), &mut val);
-            params.push(param);
+            if i.starts_with("ABAC::") {
+                let param = self.parse_param(String::from(i), &mut val);
+                // convert the params to string
+                params.push(param);
+                // res = false;
+                todo!();
+            } else {
+                // for rbac request
+                params_rbac.push(i.to_string());
+                let res = e.enforce(params_rbac).unwrap();
+            }
         }
-
+        Ok(Response::new(casbin_proto::BoolReply { res: res }))
+        
         // res, err := e.EnforceWithMatcher(m, params...)
-        let y = e.enforce(m, params);
-
-        Ok(Response::new(casbin_proto::BoolReply { res: false }))
+        
     }
 
     async fn load_policy(

@@ -1,5 +1,5 @@
 use serde_json;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 #[derive(Default)]
 pub struct AbacAttrList {
@@ -20,15 +20,20 @@ pub struct AbacAttrList {
 pub fn to_upper_first_char(s: String) -> String {
     format!("{}{}", &s[..1].to_uppercase(), &s[1..])
 }
-
+// TRY TO CONVERT INTO VECTOR OF STRING
 pub fn resolve_abac(s: String) -> Result<AbacAttrList, &'static str> {
+    // THIS MAP IS EMPTY
     let json_map: HashMap<String, String> = HashMap::new();
-    let attr_list: AbacAttrList = AbacAttrList::default();
+    let mut attr_list: AbacAttrList = AbacAttrList::default();
     attr_list.name_map = HashMap::new();
-    let i: usize = 0;
+    // need to update json_map based on s 
+    let mut i: usize = 0;
     for (k, v) in json_map.iter() {
         let key: String = to_upper_first_char(k.to_string());
         let value: String = format!("{}{}", "v", &(i.to_string()));
+        // attr_list is empty 
+        // attr_list.name_map[key] = "V" + strconv.Itoa(i);
+        
         match i {
             0 => attr_list.v0 = value,
             1 => attr_list.v1 = value,
@@ -41,6 +46,7 @@ pub fn resolve_abac(s: String) -> Result<AbacAttrList, &'static str> {
             8 => attr_list.v8 = value,
             9 => attr_list.v9 = value,
             10 => attr_list.v10 = value,
+            _ => ()
         }
         i = i + 1;
     }
