@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::CasbinGRPC;
+use crate::{CasbinGRPC};
 use crate::server::abac;
 use casbin::{Adapter, Enforcer};
 
@@ -12,6 +12,7 @@ impl CasbinGRPC {
         }
     }
     pub fn get_enforcer(&self, handle: i32) -> Result<&Enforcer, &str> {
+        // get returns reference to the value and doesn't clone it
         self.enforcer_map.get(&handle).ok_or("No enforcer found")
     }
     pub fn get_adapter(&self, handle: i32) -> Result<&Box<dyn Adapter>, &str> {
