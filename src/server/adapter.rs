@@ -60,7 +60,7 @@ pub async fn load_configuration(file: &str) -> Result<Config, std::io::Error> {
 
     let config_file = File::open(file).await.expect("file not found");
     let decoder: Config = serde_json::from_str(file).expect("JSON was not well-formatted");
-    let mut config: Config = Config::default();
+    let config: Config = Config::default();
     let re = Regex::new(r"\$\b((\w*))\b");
 
     // config.connection

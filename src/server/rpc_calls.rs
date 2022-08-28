@@ -1,18 +1,17 @@
-use std::borrow::BorrowMut;
+use std::sync::Arc;
 
 use crate::casbin_proto;
 use crate::casbin_proto::casbin_server::Casbin;
 use crate::casbin_proto::{
-    Array2DReply, ArrayReply, BoolReply, EmptyReply, EmptyRequest, EnforceRequest,
-    FilteredPolicyRequest, PolicyRequest, SimpleGetRequest,
+    Array2DReply, ArrayReply, BoolReply, EmptyReply, EmptyRequest, FilteredPolicyRequest,
+    PolicyRequest, SimpleGetRequest,
 };
+use futures::lock::Mutex;
 use tonic::{Request, Response, Status};
-use std::sync::Arc;
 
-
-use crate::server::{adapter, enforcer};
+use crate::server::adapter;
 use crate::CasbinGRPC;
-use casbin::{DefaultModel, TryIntoAdapter, CachedEnforcer};
+use casbin::{DefaultModel, CachedEnforcer};
 use casbin::MgmtApi;
 use casbin::{Adapter, CoreApi, Enforcer, RbacApi};
 
@@ -33,14 +32,15 @@ impl Casbin for CasbinGRPC {
     // get_roles_for_user gets the roles that a user has.
     async fn get_roles_for_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let x = self;
-        let enf = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap();
+        let get_inner = request.into_inner();
 
-        
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
         let mut roles = vec![];
         if let Some(outer_model) = e.get_model().get_model().to_owned().get_mut("g") {
             if let Some(inner_model) = outer_model.get_mut("g") {
@@ -59,8 +59,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
         // let implicit_roles_for_user = e.expect("permission not found.");
         let response = casbin_proto::ArrayReply { array: [].to_vec() };
         Ok(Response::new(response))
@@ -69,12 +73,16 @@ impl Casbin for CasbinGRPC {
     // get_users_for_role gets the users that have a role.
     async fn get_users_for_role(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let enf = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await; 
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
         let mut res = vec![];
-        if let Some(t1) = enf.get_model().get_model().get("g") {
+        if let Some(t1) = e.get_model().get_model().get("g") {
             if let Some(t2) = t1.get("g") {
                 res = t2.rm.read().get_users(&get_inner.user, None);
             }
@@ -86,10 +94,14 @@ impl Casbin for CasbinGRPC {
     //  has_role_for_user determines whether a user has a role.
     async fn has_role_for_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let roles = e.get_roles_for_user(get_inner.user.as_str(), None);
         for role in roles.into_iter() {
@@ -104,10 +116,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the user already has the role (aka not affected).
     async fn add_role_for_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().clone().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_added = e
@@ -123,10 +139,14 @@ impl Casbin for CasbinGRPC {
     // Use middleware
     async fn delete_role_for_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -140,10 +160,14 @@ impl Casbin for CasbinGRPC {
     // returns false if the user does not have any roles (aka not affected).
     async fn delete_roles_for_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -157,10 +181,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the user does not exist (aka not affected).
     async fn delete_user(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -173,10 +201,14 @@ impl Casbin for CasbinGRPC {
     // delete_role deletes a role
     async fn delete_role(
         &self,
-        mut request: Request<casbin_proto::UserRoleRequest>,
+        request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::EmptyReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let _ = e
             .delete_role(&get_inner.role)
             .await
@@ -188,10 +220,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the permission does not exist (aka not affected).
     async fn delete_permission(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let rule_removed = e
             .remove_filtered_policy(1, get_inner.permissions)
             .await
@@ -203,10 +239,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the user or role already has the permission (aka not affected).
     async fn add_permission_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let rule_added = e
             .add_policy(get_inner.permissions)
             .await
@@ -218,10 +258,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the user or role does not have the permission (aka not affected).
     async fn delete_permission_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let mut e =  self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let rule_removed = e
             .remove_policy(get_inner.permissions)
             .await
@@ -233,10 +277,14 @@ impl Casbin for CasbinGRPC {
     // Returns false if the user or role does not have any permissions (aka not affected).
     async fn delete_permissions_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
@@ -250,10 +298,14 @@ impl Casbin for CasbinGRPC {
     // get_permissions_for_user gets permissions for a user or role.
     async fn get_permissions_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
         Ok(Response::new(self.wrap_plain_policy(
             e.get_filtered_policy(0, vec![get_inner.user]),
         )))
@@ -262,10 +314,14 @@ impl Casbin for CasbinGRPC {
     // get_implicit_permissions_for_user gets all permissions(including children) for a user or role.
     async fn get_implicit_permissions_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let resp = e.get_implicit_permissions_for_user(get_inner.user.as_str(), None);
         Ok(Response::new(self.wrap_plain_policy(resp)))
     }
@@ -273,66 +329,66 @@ impl Casbin for CasbinGRPC {
     // has_permission_for_user gets determines whether a user has a permission.
     async fn has_permission_for_user(
         &self,
-        mut request: Request<casbin_proto::PermissionRequest>,
+        request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
         Ok(Response::new(casbin_proto::BoolReply {
-            res: e.has_policy(
-                self.convert_permission(
-                    get_inner.user,
-                    get_inner.permissions,
-                ),
-            ),
+            res: e.has_policy(self.convert_permission(get_inner.user, get_inner.permissions)),
         }))
     }
     // Enforcer functions here
     async fn new_enforcer(
         &self,
-        mut i:Request<casbin_proto::NewEnforcerRequest>,
+        i: Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
         // implement TryIntoMethod for following a as well
         let mut a: Option<Box<dyn Adapter>> = None;
-        let e: Enforcer;
+        let e: CachedEnforcer;
 
-        let mut get_inner = i.into_inner();
+        let get_inner = i.into_inner();
 
         if get_inner.adapter_handle != -1 {
             a = match self.get_adapter(get_inner.adapter_handle) {
                 Ok(&v) => Some(v),
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         }
         if get_inner.model_text == String::from("") {
             let cfg = adapter::load_configuration("config/connection_config.json").await?;
             let data = match std::fs::read_to_string(cfg.enforcer.as_str()) {
                 Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         }
 
         if a.is_none() {
             let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
                 Ok(v) => v,
-                Err(e) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
-            e = match casbin::Enforcer::new(m, ()).await {
+            e = match casbin::CachedEnforcer::new(m, ()).await {
                 Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
         } else {
             let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
                 Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
 
-            // e = match casbin::CachedEnforcer::new(m, a).await {
-            //     Ok(v) => v,
-            //     Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            // };
+            e = match casbin::CachedEnforcer::new(m, a).await {
+                Ok(v) => v,
+                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            };
         }
-        // let h = self.add_enforcer(e);
-        let h = 1;
+        // UPDATE e TO PASS into add_enforcer
+        let epass = Arc::new(Mutex::new(e));
+        let h = self.add_enforcer(epass);
         Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
     }
 
@@ -364,10 +420,14 @@ impl Casbin for CasbinGRPC {
 
     async fn enforce(
         &self,
-        mut request: Request<casbin_proto::EnforceRequest>,
+        request: Request<casbin_proto::EnforceRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         let mut params = vec![];
         let mut params_rbac = vec![];
@@ -375,11 +435,11 @@ impl Casbin for CasbinGRPC {
             Some(x) => x,
             None => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
         };
-        let mut val: String = m["m"].value;
+        let mut val: String = m["m"].value.clone();
         let mut res;
         for i in get_inner.params.iter() {
             if i.starts_with("ABAC::") {
-                let mut param = self.parse_param(String::from(i), &mut val);
+                let param = self.parse_param(String::from(i), &mut val);
                 // convert the params to string
                 params.push(param);
                 // res = false;
@@ -391,17 +451,17 @@ impl Casbin for CasbinGRPC {
             }
         }
         Ok(Response::new(casbin_proto::BoolReply { res: res }))
-        
+
         // res, err := e.EnforceWithMatcher(m, params...)
-        
     }
 
     async fn load_policy(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self.get_enforcer(get_inner.handler as i32).await.unwrap();
+        let e = wrap_enforcer.lock().await;
         Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
@@ -409,8 +469,9 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self.get_enforcer(get_inner.handler as i32).await.unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::EmptyReply {}))
     }
@@ -427,10 +488,14 @@ impl Casbin for CasbinGRPC {
 
     async fn add_named_policy(
         &self,
-        mut request: Request<PolicyRequest>,
+        request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let rule_added = e
             .add_named_policy(&get_inner.p_type, get_inner.params)
             .await
@@ -451,10 +516,14 @@ impl Casbin for CasbinGRPC {
 
     async fn remove_named_policy(
         &self,
-        mut request: Request<PolicyRequest>,
+        request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
         let rule_removed = e
             .remove_named_policy(&get_inner.p_type, get_inner.params)
             .await
@@ -476,8 +545,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let mut e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let rule_removed_filtered = e
             .remove_filtered_named_policy(
@@ -511,8 +584,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_policy("p", &*get_inner.p_type),
@@ -533,8 +610,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_filtered_policy(
@@ -559,8 +640,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let rule_added = e
             .add_named_grouping_policy(&get_inner.p_type, get_inner.params)
@@ -583,8 +668,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let rule_removed = e
             .remove_named_grouping_policy(&get_inner.p_type, get_inner.params)
@@ -610,8 +699,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
 
         let rule_filtered_removed = e
             .remove_filtered_named_grouping_policy(
@@ -630,7 +723,7 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
+        let get_inner = request.into_inner();
         Ok(self
             .get_named_grouping_policy(Request::new(casbin_proto::PolicyRequest {
                 enforcer_handler: get_inner.handler,
@@ -645,8 +738,12 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_policy("p", &get_inner.p_type),
@@ -660,18 +757,24 @@ impl Casbin for CasbinGRPC {
         let mut get_inner = request.get_mut();
         get_inner.p_type = String::from("g");
 
-        Ok(self.get_filtered_named_grouping_policy(request).await.unwrap())
+        Ok(self
+            .get_filtered_named_grouping_policy(request)
+            .await
+            .unwrap())
     }
 
     async fn get_filtered_named_grouping_policy(
         &self,
-        mut request: Request<FilteredPolicyRequest>,
+        request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
-        
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
         Ok(Response::new(self.wrap_plain_policy(
-            
             e.get_model().get_filtered_policy(
                 "g",
                 &get_inner.p_type,
@@ -685,17 +788,24 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        Ok(self.get_all_named_subjects(Request::new(casbin_proto::SimpleGetRequest {
-            enforcer_handler: request.into_inner().handler,
-            p_type: String::from("p"),
-        })).await.unwrap())
+        Ok(self
+            .get_all_named_subjects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_subjects(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -710,17 +820,24 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        Ok(self.get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
-            enforcer_handler: request.into_inner().handler,
-            p_type: String::from("p"),
-        })).await.unwrap())
+        Ok(self
+            .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_objects(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -739,14 +856,20 @@ impl Casbin for CasbinGRPC {
             .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
                 enforcer_handler: request.into_inner().handler,
                 p_type: String::from("p"),
-            })).await.unwrap())
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_actions(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -765,14 +888,20 @@ impl Casbin for CasbinGRPC {
             .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
                 enforcer_handler: request.into_inner().handler,
                 p_type: String::from("g"),
-            })).await.unwrap())
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_roles(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -795,14 +924,16 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::BoolReply {
-            res: e.get_model().has_policy(
-                "p",
-                &get_inner.p_type,
-                get_inner.params,
-            ),
+            res: e
+                .get_model()
+                .has_policy("p", &get_inner.p_type, get_inner.params),
         }))
     }
 
@@ -812,23 +943,25 @@ impl Casbin for CasbinGRPC {
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
         get_inner.p_type = String::from("g");
-
-        Ok(self.has_named_grouping_policy(request).await.unwrap())
+        let req_new = Request::new(get_inner);
+        Ok(self.has_named_grouping_policy(req_new).await.unwrap())
     }
 
     async fn has_named_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        let mut get_inner = request.into_inner();
-        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
 
         Ok(Response::new(casbin_proto::BoolReply {
-            res: e.get_model().has_policy(
-                "g",
-                &get_inner.p_type,
-                get_inner.params,
-            ),
+            res: e
+                .get_model()
+                .has_policy("g", &get_inner.p_type, get_inner.params),
         }))
     }
 }

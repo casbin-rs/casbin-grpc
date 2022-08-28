@@ -4,12 +4,11 @@ pub mod casbin_proto {
 }
 pub mod proto;
 pub mod server;
-use casbin::{Adapter, Enforcer, CachedEnforcer};
-use tokio::sync::RwLock;
+use casbin::{Adapter, CachedEnforcer};
+
 use std::sync::Arc;
 use futures::lock::Mutex;
-use std::cell::RefCell;
-use atomic_refcell::AtomicRefCell;
+
 
 // Arc is used to share data betweeen the threads, threads in rust?
 
