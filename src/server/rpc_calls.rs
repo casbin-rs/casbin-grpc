@@ -7,10 +7,12 @@ use crate::casbin_proto::{
     FilteredPolicyRequest, PolicyRequest, SimpleGetRequest,
 };
 use tonic::{Request, Response, Status};
+use std::sync::Arc;
+
 
 use crate::server::{adapter, enforcer};
 use crate::CasbinGRPC;
-use casbin::{DefaultModel, TryIntoAdapter};
+use casbin::{DefaultModel, TryIntoAdapter, CachedEnforcer};
 use casbin::MgmtApi;
 use casbin::{Adapter, CoreApi, Enforcer, RbacApi};
 
@@ -34,10 +36,11 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let x = self;
+        let enf = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap();
+
+        
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let mut roles = vec![];
         if let Some(outer_model) = e.get_model().get_model().to_owned().get_mut("g") {
             if let Some(inner_model) = outer_model.get_mut("g") {
@@ -57,10 +60,7 @@ impl Casbin for CasbinGRPC {
         request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         // let implicit_roles_for_user = e.expect("permission not found.");
         let response = casbin_proto::ArrayReply { array: [].to_vec() };
         Ok(Response::new(response))
@@ -72,10 +72,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::ArrayReply>, Status> {
         let mut get_inner = request.into_inner();
-        let enf = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(e) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let enf = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await; 
         let mut res = vec![];
         if let Some(t1) = enf.get_model().get_model().get("g") {
             if let Some(t2) = t1.get("g") {
@@ -92,10 +89,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let roles = e.get_roles_for_user(get_inner.user.as_str(), None);
         for role in roles.into_iter() {
@@ -113,10 +107,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().clone().lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_added = e
@@ -128,15 +119,14 @@ impl Casbin for CasbinGRPC {
 
     // delete_role_for_user deletes a role for a user.
     // Returns false if the user does not have the role (aka not affected).
+
+    // Use middleware
     async fn delete_role_for_user(
         &self,
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -153,10 +143,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -173,10 +160,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
         let rule_removed = e
@@ -192,10 +176,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::UserRoleRequest>,
     ) -> Result<Response<casbin_proto::EmptyReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let _ = e
             .delete_role(&get_inner.role)
             .await
@@ -210,10 +191,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let rule_removed = e
             .remove_filtered_policy(1, get_inner.permissions)
             .await
@@ -228,10 +206,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let rule_added = e
             .add_policy(get_inner.permissions)
             .await
@@ -246,10 +221,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let mut e =  self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let rule_removed = e
             .remove_policy(get_inner.permissions)
             .await
@@ -264,10 +236,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let mut user_vec = Vec::new();
         user_vec.push(get_inner.user);
@@ -284,10 +253,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         Ok(Response::new(self.wrap_plain_policy(
             e.get_filtered_policy(0, vec![get_inner.user]),
         )))
@@ -299,10 +265,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let resp = e.get_implicit_permissions_for_user(get_inner.user.as_str(), None);
         Ok(Response::new(self.wrap_plain_policy(resp)))
     }
@@ -313,10 +276,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::PermissionRequest>,
     ) -> Result<Response<casbin_proto::BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         Ok(Response::new(casbin_proto::BoolReply {
             res: e.has_policy(
                 self.convert_permission(
@@ -366,12 +326,13 @@ impl Casbin for CasbinGRPC {
                 Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
             };
 
-            e = match casbin::Enforcer::new(m, a).await {
-                Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
+            // e = match casbin::CachedEnforcer::new(m, a).await {
+            //     Ok(v) => v,
+            //     Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+            // };
         }
-        let h = self.add_enforcer(e);
+        // let h = self.add_enforcer(e);
+        let h = 1;
         Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
     }
 
@@ -406,10 +367,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<casbin_proto::EnforceRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let mut params = vec![];
         let mut params_rbac = vec![];
@@ -443,10 +401,7 @@ impl Casbin for CasbinGRPC {
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Ok(Response::new(casbin_proto::EmptyReply {})),
-        };
+        let e = self.get_enforcer(get_inner.handler as i32).await.unwrap().lock().await;
         Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
@@ -455,10 +410,7 @@ impl Casbin for CasbinGRPC {
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Ok(Response::new(casbin_proto::EmptyReply {})),
-        };
+        let e = self.get_enforcer(get_inner.handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::EmptyReply {}))
     }
@@ -478,10 +430,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Ok(Response::new(casbin_proto::BoolReply { res: false })),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let rule_added = e
             .add_named_policy(&get_inner.p_type, get_inner.params)
             .await
@@ -505,10 +454,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         let rule_removed = e
             .remove_named_policy(&get_inner.p_type, get_inner.params)
             .await
@@ -531,10 +477,7 @@ impl Casbin for CasbinGRPC {
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(err) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found")),
-        };
+        let mut e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let rule_removed_filtered = e
             .remove_filtered_named_policy(
@@ -569,10 +512,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_policy("p", &*get_inner.p_type),
@@ -594,10 +534,7 @@ impl Casbin for CasbinGRPC {
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_filtered_policy(
@@ -623,10 +560,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let rule_added = e
             .add_named_grouping_policy(&get_inner.p_type, get_inner.params)
@@ -650,10 +584,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(er) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let rule_removed = e
             .remove_named_grouping_policy(&get_inner.p_type, get_inner.params)
@@ -680,10 +611,7 @@ impl Casbin for CasbinGRPC {
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         let rule_filtered_removed = e
             .remove_filtered_named_grouping_policy(
@@ -718,10 +646,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(self.wrap_plain_policy(
             e.get_model().get_policy("p", &get_inner.p_type),
@@ -743,10 +668,7 @@ impl Casbin for CasbinGRPC {
         mut request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
         
         Ok(Response::new(self.wrap_plain_policy(
             
@@ -773,10 +695,7 @@ impl Casbin for CasbinGRPC {
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = match self.get_enforcer(request.get_mut().enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -801,10 +720,7 @@ impl Casbin for CasbinGRPC {
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = match self.get_enforcer(request.get_mut().enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -830,10 +746,7 @@ impl Casbin for CasbinGRPC {
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = match self.get_enforcer(request.get_mut().enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -859,10 +772,7 @@ impl Casbin for CasbinGRPC {
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        let e = match self.get_enforcer(request.get_mut().enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(request.get_mut().enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::ArrayReply {
             array: e.get_model().get_values_for_field_in_policy(
@@ -885,10 +795,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::BoolReply {
             res: e.get_model().has_policy(
@@ -914,10 +821,7 @@ impl Casbin for CasbinGRPC {
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         let mut get_inner = request.into_inner();
-        let e = match self.get_enforcer(get_inner.enforcer_handler as i32) {
-            Ok(v) => v,
-            Err(_) => return Err(Status::new(tonic::Code::NotFound, "Enforcer not found.")),
-        };
+        let e = self.get_enforcer(get_inner.enforcer_handler as i32).await.unwrap().lock().await;
 
         Ok(Response::new(casbin_proto::BoolReply {
             res: e.get_model().has_policy(
