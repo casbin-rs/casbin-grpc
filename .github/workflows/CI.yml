@@ -34,11 +34,11 @@ jobs:
           cargo check --all
           cargo test --all --no-fail-fast
 
-      - name: Clippy warnings
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      # - name: Clippy warnings
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: clippy
+      #     args: -- -D warnings
 
       - name: Cargo Fmt Check
         uses: actions-rs/cargo@v1

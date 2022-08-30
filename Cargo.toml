@@ -2,18 +2,25 @@
 name = "casbin-grpc"
 version = "0.1.0"
 authors = ["hackerchai <i@hackerchai.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tonic = "0.5"
-prost = "0.8"
+tonic = "0.8.0"
+prost = "0.11.0"
+bytes = "1.2.1"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.6.1", features = ["full", "rt-multi-thread", "macros"] }
-casbin = "2.0.7"
+futures = "0.3.23"
+casbin = { version = "2.0.9", default-features = true, features = ["incremental", "cached"] }
 serde_json = "1.0"
 regex = "1.5.4"
+# sqlx-adapter = { version = "0.4.2", features = ["postgres"] }
+# casbin = { path = "/home/siddhesh/Desktop/Siddhesh/Casbin/casbin-rs/casbin-rs", default-features = true, features = ["incremental", "cached"]}
+
 
 [build-dependencies]
-tonic-build = "0.5"
+tonic-build = "0.8.0"
+
+
