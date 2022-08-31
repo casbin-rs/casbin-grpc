@@ -12,7 +12,7 @@ use tonic::{Request, Response, Status};
 use crate::server::adapter;
 use crate::CasbinGRPC;
 use casbin::MgmtApi;
-use casbin::{Adapter, CoreApi, Enforcer, RbacApi};
+use casbin::{Adapter, CoreApi, RbacApi};
 use casbin::{CachedEnforcer, DefaultModel};
 
 impl CasbinGRPC {
@@ -374,34 +374,57 @@ impl Casbin for CasbinGRPC {
         request: Request<casbin_proto::EnforceRequest>,
     ) -> Result<Response<BoolReply>, Status> {
         todo!()
+
+        // res, err := e.EnforceWithMatcher(m, params...)
     }
 
     async fn load_policy(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self.get_enforcer(get_inner.handler as i32).await.unwrap();
+        let e = wrap_enforcer.lock().await;
+        Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
     async fn save_policy(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<EmptyReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self.get_enforcer(get_inner.handler as i32).await.unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
     async fn add_policy(
         &self,
         mut request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("p");
+
+        Ok(self.add_named_policy(request).await.unwrap())
     }
 
     async fn add_named_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+        let rule_added = e
+            .add_named_policy(&get_inner.p_type, get_inner.params)
+            .await
+            .unwrap();
+
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_added }))
     }
 
     async fn remove_policy(
@@ -418,201 +441,450 @@ impl Casbin for CasbinGRPC {
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+        let rule_removed = e
+            .remove_named_policy(&get_inner.p_type, get_inner.params)
+            .await
+            .unwrap();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     async fn remove_filtered_policy(
         &self,
         mut request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("p");
+
+        Ok(self.remove_filtered_named_policy(request).await.unwrap())
     }
 
     async fn remove_filtered_named_policy(
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+
+        let rule_removed_filtered = e
+            .remove_filtered_named_policy(
+                &get_inner.p_type,
+                get_inner.field_index as usize,
+                get_inner.field_values,
+            )
+            .await
+            .unwrap();
+
+        Ok(Response::new(casbin_proto::BoolReply {
+            res: rule_removed_filtered,
+        }))
     }
 
     async fn get_policy(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        Ok(self
+            .get_named_policy(Request::new(casbin_proto::PolicyRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+                params: vec![String::from("")],
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_named_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(self.wrap_plain_policy(
+            e.get_model().get_policy("p", &*get_inner.p_type),
+        )))
     }
 
     async fn get_filtered_policy(
         &self,
         mut request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("p");
+
+        Ok(self.get_filtered_named_policy(request).await.unwrap())
     }
 
     async fn get_filtered_named_policy(
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(self.wrap_plain_policy(
+            e.get_model().get_filtered_policy(
+                "p",
+                &*get_inner.p_type,
+                get_inner.field_index as usize,
+                get_inner.field_values,
+            ),
+        )))
     }
 
     async fn add_grouping_policy(
         &self,
         mut request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("g");
+
+        Ok(self.add_named_grouping_policy(request).await.unwrap())
     }
     async fn add_named_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+
+        let rule_added = e
+            .add_named_grouping_policy(&get_inner.p_type, get_inner.params)
+            .await
+            .unwrap();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_added }))
     }
 
     async fn remove_grouping_policy(
         &self,
         mut request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("g");
+
+        Ok(self.remove_named_grouping_policy(request).await.unwrap())
     }
 
     async fn remove_named_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+
+        let rule_removed = e
+            .remove_named_grouping_policy(&get_inner.p_type, get_inner.params)
+            .await
+            .unwrap();
+        Ok(Response::new(casbin_proto::BoolReply { res: rule_removed }))
     }
 
     async fn remove_filtered_grouping_policy(
         &self,
         mut request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("g");
+
+        Ok(self
+            .remove_filtered_named_grouping_policy(request)
+            .await
+            .unwrap())
     }
 
     async fn remove_filtered_named_grouping_policy(
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let mut e = wrap_enforcer.lock().await;
+
+        let rule_filtered_removed = e
+            .remove_filtered_named_grouping_policy(
+                &get_inner.p_type,
+                get_inner.field_index as usize,
+                get_inner.field_values,
+            )
+            .await
+            .unwrap();
+        Ok(Response::new(casbin_proto::BoolReply {
+            res: rule_filtered_removed,
+        }))
     }
 
     async fn get_grouping_policy(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        Ok(self
+            .get_named_grouping_policy(Request::new(casbin_proto::PolicyRequest {
+                enforcer_handler: get_inner.handler,
+                p_type: String::from("g"),
+                params: vec![String::from("")],
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_named_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(self.wrap_plain_policy(
+            e.get_model().get_policy("p", &get_inner.p_type),
+        )))
     }
 
     async fn get_filtered_grouping_policy(
         &self,
         mut request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let mut get_inner = request.get_mut();
+        get_inner.p_type = String::from("g");
+
+        Ok(self
+            .get_filtered_named_grouping_policy(request)
+            .await
+            .unwrap())
     }
 
     async fn get_filtered_named_grouping_policy(
         &self,
         request: Request<FilteredPolicyRequest>,
     ) -> Result<Response<Array2DReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(self.wrap_plain_policy(
+            e.get_model().get_filtered_policy(
+                "g",
+                &get_inner.p_type,
+                get_inner.field_index as usize,
+                get_inner.field_values,
+            ),
+        )))
     }
 
     async fn get_all_subjects(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        Ok(self
+            .get_all_named_subjects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_subjects(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::ArrayReply {
+            array: e.get_model().get_values_for_field_in_policy(
+                "p",
+                &request.into_inner().p_type,
+                0,
+            ),
+        }))
     }
 
     async fn get_all_objects(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        Ok(self
+            .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_objects(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::ArrayReply {
+            array: e.get_model().get_values_for_field_in_policy(
+                "p",
+                &request.into_inner().p_type,
+                1,
+            ),
+        }))
     }
 
     async fn get_all_actions(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        Ok(self
+            .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("p"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_actions(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::ArrayReply {
+            array: e.get_model().get_values_for_field_in_policy(
+                "p",
+                &request.into_inner().p_type,
+                2,
+            ),
+        }))
     }
 
     async fn get_all_roles(
         &self,
         request: Request<EmptyRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        Ok(self
+            .get_all_named_objects(Request::new(casbin_proto::SimpleGetRequest {
+                enforcer_handler: request.into_inner().handler,
+                p_type: String::from("g"),
+            }))
+            .await
+            .unwrap())
     }
 
     async fn get_all_named_roles(
         &self,
         mut request: Request<SimpleGetRequest>,
     ) -> Result<Response<ArrayReply>, Status> {
-        todo!()
+        let wrap_enforcer = self
+            .get_enforcer(request.get_mut().enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::ArrayReply {
+            array: e.get_model().get_values_for_field_in_policy(
+                "g",
+                &request.into_inner().p_type,
+                1,
+            ),
+        }))
     }
 
     async fn has_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        Ok(self.has_named_policy(request).await.unwrap())
     }
 
     async fn has_named_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::BoolReply {
+            res: e
+                .get_model()
+                .has_policy("p", &get_inner.p_type, get_inner.params),
+        }))
     }
 
     async fn has_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let mut get_inner = request.into_inner();
+        get_inner.p_type = String::from("g");
+        let req_new = Request::new(get_inner);
+        Ok(self.has_named_grouping_policy(req_new).await.unwrap())
     }
 
     async fn has_named_grouping_policy(
         &self,
         request: Request<PolicyRequest>,
     ) -> Result<Response<BoolReply>, Status> {
-        todo!()
+        let get_inner = request.into_inner();
+        let wrap_enforcer = self
+            .get_enforcer(get_inner.enforcer_handler as i32)
+            .await
+            .unwrap();
+        let e = wrap_enforcer.lock().await;
+
+        Ok(Response::new(casbin_proto::BoolReply {
+            res: e
+                .get_model()
+                .has_policy("g", &get_inner.p_type, get_inner.params),
+        }))
     }
 }

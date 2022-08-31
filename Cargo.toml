@@ -13,11 +13,11 @@ bytes = "1.2.1"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.6.1", features = ["full", "rt-multi-thread", "macros"] }
 futures = "0.3.23"
-casbin = { version = "2.0.9", default-features = true, features = ["incremental", "cached"] }
+# casbin = { version = "2.0.9", default-features = true, features = ["incremental", "cached"] }
 serde_json = "1.0"
 regex = "1.5.4"
 # sqlx-adapter = { version = "0.4.2", features = ["postgres"] }
-# casbin = { path = "/home/siddhesh/Desktop/Siddhesh/Casbin/casbin-rs/casbin-rs", default-features = true, features = ["incremental", "cached"]}
+casbin = { path = "/home/siddhesh/Desktop/Siddhesh/Casbin/casbin-rs/casbin-rs", default-features = true, features = ["incremental", "cached"]}
 
 
 [build-dependencies]
