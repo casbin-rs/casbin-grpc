@@ -108,17 +108,18 @@ pub mod array2_d_reply {
         pub d1: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     }
 }
-#[doc = r" Generated client implementations."]
+/// Generated client implementations.
 pub mod casbin_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
+    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    #[doc = " The Casbin service definition."]
+    /// The Casbin service definition.
     #[derive(Debug, Clone)]
     pub struct CasbinClient<T> {
         inner: tonic::client::Grpc<T>,
     }
     impl CasbinClient<tonic::transport::Channel> {
-        #[doc = r" Attempt to create a new client by connecting to a given endpoint."]
+        /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
             D: std::convert::TryInto<tonic::transport::Endpoint>,
@@ -131,12 +132,16 @@ pub mod casbin_client {
     impl<T> CasbinClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
-        T::ResponseBody: Body + Send + Sync + 'static,
         T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + Send,
     {
         pub fn new(inner: T) -> Self {
             let inner = tonic::client::Grpc::new(inner);
+            Self { inner }
+        }
+        pub fn with_origin(inner: T, origin: Uri) -> Self {
+            let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
         pub fn with_interceptor<F>(
@@ -144,7 +149,8 @@ pub mod casbin_client {
             interceptor: F,
         ) -> CasbinClient<InterceptedService<T, F>>
         where
-            F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+            F: tonic::service::Interceptor,
+            T::ResponseBody: Default,
             T: tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
                 Response = http::Response<
@@ -156,17 +162,19 @@ pub mod casbin_client {
         {
             CasbinClient::new(InterceptedService::new(inner, interceptor))
         }
-        #[doc = r" Compress requests with `gzip`."]
-        #[doc = r""]
-        #[doc = r" This requires the server to support it otherwise it might respond with an"]
-        #[doc = r" error."]
-        pub fn send_gzip(mut self) -> Self {
-            self.inner = self.inner.send_gzip();
+        /// Compress requests with the given encoding.
+        ///
+        /// This requires the server to support it otherwise it might respond with an
+        /// error.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.send_compressed(encoding);
             self
         }
-        #[doc = r" Enable decompressing responses with `gzip`."]
-        pub fn accept_gzip(mut self) -> Self {
-            self.inner = self.inner.accept_gzip();
+        /// Enable decompressing responses.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.accept_compressed(encoding);
             self
         }
         pub async fn new_enforcer(
@@ -925,11 +933,11 @@ pub mod casbin_client {
         }
     }
 }
-#[doc = r" Generated server implementations."]
+/// Generated server implementations.
 pub mod casbin_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    #[doc = "Generated trait containing gRPC methods that should be implemented for use with CasbinServer."]
+    ///Generated trait containing gRPC methods that should be implemented for use with CasbinServer.
     #[async_trait]
     pub trait Casbin: Send + Sync + 'static {
         async fn new_enforcer(
@@ -1145,17 +1153,19 @@ pub mod casbin_server {
             request: tonic::Request<super::PermissionRequest>,
         ) -> Result<tonic::Response<super::BoolReply>, tonic::Status>;
     }
-    #[doc = " The Casbin service definition."]
+    /// The Casbin service definition.
     #[derive(Debug)]
     pub struct CasbinServer<T: Casbin> {
         inner: _Inner<T>,
-        accept_compression_encodings: (),
-        send_compression_encodings: (),
+        accept_compression_encodings: EnabledCompressionEncodings,
+        send_compression_encodings: EnabledCompressionEncodings,
     }
     struct _Inner<T>(Arc<T>);
     impl<T: Casbin> CasbinServer<T> {
         pub fn new(inner: T) -> Self {
-            let inner = Arc::new(inner);
+            Self::from_arc(Arc::new(inner))
+        }
+        pub fn from_arc(inner: Arc<T>) -> Self {
             let inner = _Inner(inner);
             Self {
                 inner,
@@ -1165,19 +1175,31 @@ pub mod casbin_server {
         }
         pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
-            F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+            F: tonic::service::Interceptor,
         {
             InterceptedService::new(Self::new(inner), interceptor)
+        }
+        /// Enable decompressing requests with the given encoding.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.accept_compression_encodings.enable(encoding);
+            self
+        }
+        /// Compress responses with the given encoding, if the client supports it.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.send_compression_encodings.enable(encoding);
+            self
         }
     }
     impl<T, B> tonic::codegen::Service<http::Request<B>> for CasbinServer<T>
     where
         T: Casbin,
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
         type Response = http::Response<tonic::body::BoxBody>;
-        type Error = Never;
+        type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
         fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
@@ -2914,7 +2936,7 @@ pub mod casbin_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: Casbin> tonic::transport::NamedService for CasbinServer<T> {
+    impl<T: Casbin> tonic::server::NamedService for CasbinServer<T> {
         const NAME: &'static str = "proto.Casbin";
     }
 }

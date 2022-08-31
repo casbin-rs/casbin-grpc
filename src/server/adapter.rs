@@ -1,5 +1,5 @@
 use crate::casbin_proto::NewAdapterRequest;
-use casbin::FileAdapter;
+use casbin::{Adapter, FileAdapter};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -10,10 +10,10 @@ pub static ERR_DRIVER_NAME: &str =
     "currently supported DriverName: file | mysql | postgres | mssql";
 
 pub async fn new_adapter(
-    i: &mut Request<NewAdapterRequest>,
-) -> Result<FileAdapter<String>, &'static str> {
-    let a: FileAdapter<String>;
-    check_local_config(i);
+    request: &mut Request<NewAdapterRequest>,
+) -> Result<Box<dyn Adapter>, &'static str> {
+    let a: Box<dyn Adapter>;
+    check_local_config(request);
     let support_driver_names = vec![
         String::from("file"),
         String::from("mysql"),
@@ -21,13 +21,13 @@ pub async fn new_adapter(
         String::from("mssql"),
     ];
     let st = String::from("file");
-    let connect_string = i.get_mut().connect_string;
-    match &i.get_mut().driver_name {
-        st => a = FileAdapter::new(connect_string.to_string()),
+    let connect_string = &request.get_ref().connect_string;
+    match &request.get_ref().driver_name {
+        st => a = Box::new(FileAdapter::new(connect_string.to_string())),
         _ => {
             let mut support: bool = false;
             for driver_name in support_driver_names.iter() {
-                if driver_name == &i.get_mut().driver_name {
+                if driver_name == &request.get_ref().driver_name {
                     support = true;
                     break;
                 }
@@ -35,17 +35,17 @@ pub async fn new_adapter(
             if !support {
                 return Err(ERR_DRIVER_NAME);
             }
-            // a, err = gormadapter.NewAdapter(in.DriverName, in.ConnectString, in.DbSpecified)
+            a = Box::new(FileAdapter::new(connect_string.to_string()));
         }
     }
     Ok(a)
 }
 
-pub async fn check_local_config(i: &mut Request<NewAdapterRequest>) {
+pub async fn check_local_config(request: &mut Request<NewAdapterRequest>) {
     let cfg: Config = load_configuration("config/connection_config.json")
         .await
         .expect("connection_config.json file not found");
-    let x = i.get_mut();
+    let x = request.get_mut();
     if x.connect_string.is_empty() || x.driver_name == "" {
         x.driver_name = cfg.driver;
         x.connect_string = cfg.connection;
@@ -59,7 +59,7 @@ pub async fn load_configuration(file: &str) -> Result<Config, std::io::Error> {
 
     let config_file = File::open(file).await.expect("file not found");
     let decoder: Config = serde_json::from_str(file).expect("JSON was not well-formatted");
-    let mut config: Config = Config::default();
+    let config: Config = Config::default();
     let re = Regex::new(r"\$\b((\w*))\b");
 
     // config.connection

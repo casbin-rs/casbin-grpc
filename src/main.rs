@@ -4,12 +4,17 @@ pub mod casbin_proto {
 }
 pub mod proto;
 pub mod server;
-use casbin::{Adapter, Enforcer};
+use casbin::{Adapter, CachedEnforcer};
+
+use futures::lock::Mutex;
+use std::sync::Arc;
+
+// Arc is used to share data betweeen the threads, threads in rust?
 
 #[derive(Default)]
 pub struct CasbinGRPC {
-    enforcerMap: HashMap<i32, Enforcer>,
-    adapterMap: HashMap<i32, Box<dyn Adapter>>,
+    enforcer_map: HashMap<i32, Arc<Mutex<CachedEnforcer>>>,
+    adapter_map: HashMap<i32, Box<dyn Adapter>>,
 }
 
 #[tokio::main]
