@@ -22,6 +22,11 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           override: true
+      
+      - name: Install Proto compiler
+        run: |
+          sudo apt-get update
+          sudo apt install -y protobuf-compiler
     
       - name: Cache
         uses: Swatinem/rust-cache@v1
