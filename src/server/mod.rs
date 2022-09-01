@@ -1,3 +1,4 @@
+pub mod abac;
 pub mod adapter;
 pub mod enforcer;
 pub mod management_api;
