@@ -1,4 +1,3 @@
-
 use std::cmp::PartialEq;
 use std::fmt::Debug;
 
@@ -38,7 +37,7 @@ pub struct HashTable<Key, Value> {
 impl<Key, Value> HashTable<Key, Value>
 where
     Key: Clone + Default + Debug + PartialEq + Hashable,
-    Value: Clone + Default + Debug,
+    Value: Clone + Default + Debug + Copy,
 {
     pub fn new() -> Self {
         const INITIAL_CAPACITY: usize = 11;

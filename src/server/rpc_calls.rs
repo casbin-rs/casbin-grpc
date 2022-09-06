@@ -346,51 +346,52 @@ impl Casbin for CasbinGRPC {
         &self,
         i: Request<casbin_proto::NewEnforcerRequest>,
     ) -> Result<Response<casbin_proto::NewEnforcerReply>, Status> {
-        let mut a: Option<Arc<Mutex<Box<dyn Adapter>>>> = None;
-        let e: CachedEnforcer;
+        // let mut a: Option<Arc<Mutex<Box<dyn Adapter>>>> = None;
+        // let e: CachedEnforcer;
 
-        let get_inner = i.into_inner();
+        // let get_inner = i.into_inner();
 
-        if get_inner.adapter_handle != -1 {
-            let a = match self.get_adapter(get_inner.adapter_handle).await {
-                Ok(v) => Some(v),
-                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-        }
+        // if get_inner.adapter_handle != -1 {
+        //     let a = match self.get_adapter(get_inner.adapter_handle).await {
+        //         Ok(v) => Some(v),
+        //         Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        // }
 
-        if get_inner.model_text == String::from("") {
-            let cfg = adapter::load_configuration("config/connection_config.json").await?;
-            let data = match std::fs::read_to_string(cfg.enforcer.as_str()) {
-                Ok(v) => v,
-                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-        }
+        // if get_inner.model_text == String::from("") {
+        //     let cfg = adapter::load_configuration("config/connection_config.json").await?;
+        //     let data = match std::fs::read_to_string(cfg.enforcer.as_str()) {
+        //         Ok(v) => v,
+        //         Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        // }
 
-        if a.is_none() {
-            let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
-                Ok(v) => v,
-                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-            e = match casbin::CachedEnforcer::new(m, ()).await {
-                Ok(v) => v,
-                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-        } else {
-            let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
-                Ok(v) => v,
-                Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-            let adapter = a.unwrap().lock().await;
+        // if a.is_none() {
+        //     let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
+        //         Ok(v) => v,
+        //         Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        //     e = match casbin::CachedEnforcer::new(m, ()).await {
+        //         Ok(v) => v,
+        //         Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        // } else {
+        //     let m = match DefaultModel::from_str(get_inner.model_text.as_str()).await {
+        //         Ok(v) => v,
+        //         Err(_) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        //     let adapter = a.unwrap().lock().await;
 
-            e = match casbin::CachedEnforcer::new(m, a).await {
-                Ok(v) => v,
-                Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
-            };
-        }
+        //     e = match casbin::CachedEnforcer::new(m, a).await {
+        //         Ok(v) => v,
+        //         Err(er) => return Ok(Response::new(casbin_proto::NewEnforcerReply { handler: 0 })),
+        //     };
+        // }
 
-        let epass = Arc::new(Mutex::new(e));
-        let h = self.add_enforcer(epass);
-        Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
+        // let epass = Arc::new(Mutex::new(e));
+        // let h = self.add_enforcer(epass);
+        // Ok(Response::new(casbin_proto::NewEnforcerReply { handler: h }))
+        todo!()
     }
 
     async fn new_adapter(
