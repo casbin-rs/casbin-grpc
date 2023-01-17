@@ -5,10 +5,10 @@ pub mod casbin_proto {
 pub mod server;
 use casbin::{Adapter, CachedEnforcer};
 
+use crate::casbin_proto::casbin_server::CasbinServer;
 use futures::lock::Mutex;
 use std::sync::Arc;
 use tonic::transport::Server;
-use crate::casbin_proto::casbin_server::CasbinServer;
 
 // Arc is used to share data betweeen the threads, threads in rust?
 
@@ -25,9 +25,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Server listening on: {}", addr);
     Server::builder()
-       .add_service(CasbinServer::new(casbin))
-       .serve(addr)
-       .await?;
+        .add_service(CasbinServer::new(casbin))
+        .serve(addr)
+        .await?;
 
     Ok(())
 }
