@@ -384,7 +384,8 @@ impl Casbin for CasbinGRPC {
     ) -> Result<Response<EmptyReply>, Status> {
         let get_inner = request.into_inner();
         let wrap_enforcer = self.get_enforcer(get_inner.handler as i32).await.unwrap();
-        let e = wrap_enforcer.lock().await;
+        let mut enforce = wrap_enforcer.lock().await;
+        enforce.load_policy().await.unwrap();
         Ok(Response::new(casbin_proto::EmptyReply {}))
     }
 
